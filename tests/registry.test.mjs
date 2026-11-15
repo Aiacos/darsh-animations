@@ -48,3 +48,15 @@ describe("tables enregistrées par d'autres modules", () => {
     expect(base.animations.eyebite[0].alias).toBe("spell.x");
   });
 });
+
+describe("compendiums parcourus par la synchronisation", () => {
+  it("chaque compendium du Manuel des joueurs a son équivalent du SRD 2024 de dnd5e (un monde sans le Manuel)", async () => {
+    const { SOURCES } = await import("../module/scripts/data/animations.mjs");
+    const srd = { spells: "dnd5e.spells24", classes: "dnd5e.classes24", equipment: "dnd5e.equipment24" };
+    for ( const pack of SOURCES.filter(p => p.startsWith("dnd-players-handbook.")) ) {
+      const kind = pack.split(".")[1];
+      expect(srd[kind], `pas d'équivalent SRD connu pour ${pack}`).toBeTruthy();
+      expect(SOURCES, `${srd[kind]} manque`).toContain(srd[kind]);
+    }
+  });
+});

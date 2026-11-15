@@ -41,6 +41,11 @@ export const SOURCES = Object.freeze([
   "dnd-players-handbook.classes",
   // Les lanternes (PHB 2024, SRD de dnd5e) : leurs entrées remplacent la macro intégrée de BLFX dès qu'une fiche en reçoit une.
   "dnd-players-handbook.equipment",
+  // Le SRD 2024 de dnd5e : les mêmes sorts, aptitudes de classe et objets sous les mêmes noms anglais, pour un monde sans le
+  // Manuel des joueurs (sans eux, la synchronisation ne trouvait que les items déjà posés sur des fiches).
+  "dnd5e.spells24",
+  "dnd5e.classes24",
+  "dnd5e.equipment24",
   "dnd5e.items"
 ]);
 

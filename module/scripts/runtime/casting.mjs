@@ -8,7 +8,13 @@
  * Ici, chez le client qui a utilisé l'activité : après l'utilisation (`dnd5e.postUseActivity`), une activité à zone sans zone posée
  * (`results.templates` vide) est surveillée. Tant que le moteur de combat vise encore une zone pour elle (murs par points, zones
  * visées : `api.ui.targeting()`, lu seulement s'il est là), on attend ; sans visée, et sans région créée pour cette activité peu après,
- * l'incantation est arrêtée. Rien n'est arrêté si la zone a été posée : BLFX s'en charge.
+ * l'incantation est arrêtée.
+ *
+ * Zone posée tout de suite (signalé sur le Discord le 2026-11-17, Éclair) : BLFX démarre le son d'incantation avec un retard
+ * (`DELAY_SOUND12: 500` pour Éclair, Mur de feu) et ne l'arrête qu'à la pose, par son nom. Quand le moteur pose la zone dès
+ * l'utilisation (visée avant le lancement : cône, ligne, cube de portée personnelle, murs par points), cet arrêt arrive avant que
+ * le son existe, et la boucle tourne sans fin. Chez le client qui a créé la région, l'incantation est donc arrêtée une seconde fois
+ * un peu plus tard (`LATE_END_MS`) : sans effet si BLFX l'a déjà arrêtée, jamais le son de la zone elle-même (autre nom).
  */
 import { MODULE_ID, blfxActive, log } from "./shared.mjs";
 
@@ -18,6 +24,8 @@ const GRACE_MS = 1500;
 /** Au-delà, on cesse de surveiller (une visée oubliée ouverte). */
 const MAX_WATCH_MS = 5 * 60 * 1000;
 const POLL_MS = 500;
+/** Après la création d'une région, le temps laissé à l'incantation retardée de BLFX pour démarrer avant le second arrêt. */
+const LATE_END_MS = 2000;
 
 /** Activités dont une région vient d'être posée (uuid → instant). */
 const placed = new Map();
@@ -85,16 +93,43 @@ export function onPostUse(activity, usageConfig, results) {
   return { watching: activity.uuid, token: token.id };
 }
 
+/** Le token du lanceur d'une région posée pour une activité : son origine (`flags.dnd5e.origin`), sinon un token de l'acteur sur sa scène. */
+function regionCaster(region, activity) {
+  const origin = region.flags?.dnd5e?.origin;
+  const doc = origin ? fromUuidSync(origin, { strict: false }) : null;
+  if ( (doc?.documentName === "Token") && (doc.parent === region.parent) ) return doc;
+  return activity.actor?.getActiveTokens?.(false, true)?.find(t => t.parent === region.parent) ?? null;
+}
+
+/**
+ * Une région vient d'être posée pour une activité par ce client : arrêter de nouveau l'incantation de BLFX un peu plus tard (la course
+ * avec son son retardé, en tête du fichier). Rend ce qui a été décidé (scénarios).
+ */
+export async function onRegionPlaced(region, userId) {
+  const uuid = region?.flags?.dnd5e?.activity;
+  if ( !uuid ) return { skipped: "no activity" };
+  placed.set(uuid, Date.now());
+  if ( (userId !== game.user.id) || !blfxActive() ) return { skipped: "not ours or no BLFX" };
+  const activity = await fromUuid(uuid).catch(() => null);
+  const itemName = activity?.item?.name;
+  const token = activity ? regionCaster(region, activity) : null;
+  if ( !itemName || !token ) return { skipped: "no item or caster" };
+  setTimeout(() => endCasting(itemName, token.id).catch(err => console.error(`${MODULE_ID} | casting cleanup`, err)), LATE_END_MS);
+  return { lateEnd: LATE_END_MS, token: token.id };
+}
+
 export function registerCasting() {
   Hooks.on("dnd5e.postUseActivity", (activity, usageConfig, results) => { onPostUse(activity, usageConfig, results); });
-  Hooks.on("createRegion", region => {
-    const uuid = region.flags?.dnd5e?.activity;
-    if ( uuid ) placed.set(uuid, Date.now());
+  Hooks.on("createRegion", (region, options, userId) => {
+    onRegionPlaced(region, userId).catch(err => console.error(`${MODULE_ID} | casting cleanup`, err));
   });
 }
 
-/** Pour les scénarios : jouer une incantation persistante comme BLFX la nomme, puis la surveiller comme après une pose annulée. */
-export async function previewCancelledCast({ tokenId, identifier, animation }={}) {
+/**
+ * Pour les scénarios : jouer une incantation persistante comme BLFX la nomme, puis la surveiller comme après une pose annulée
+ * (`watch: false` : seulement la jouer, comme le son retardé de BLFX qui démarre après la pose de la zone).
+ */
+export async function previewCancelledCast({ tokenId, identifier, animation, watch=true }={}) {
   const token = canvas.scene?.tokens.get(tokenId);
   const item = token?.actor?.items.find(i => i.system?.identifier === identifier);
   const activity = [...(item?.system?.activities ?? [])].find(a => a.target?.template?.type) ?? null;
@@ -103,7 +138,9 @@ export async function previewCancelledCast({ tokenId, identifier, animation }={}
   await new Sequence({ moduleName: MODULE_ID }).effect().file(animation).atLocation(token.object).attachTo(token.object)
     .name(name).persist().play();
   const before = globalThis.Sequencer.EffectManager.getEffects({ name }).length;
-  const decided = onPostUse(activity, {}, { templates: [], message: { speaker: { scene: token.parent.id, token: token.id } } });
+  const decided = watch
+    ? onPostUse(activity, {}, { templates: [], message: { speaker: { scene: token.parent.id, token: token.id } } })
+    : { watching: null };
   return { name, before, decided, activity: activity.uuid };
 }
 

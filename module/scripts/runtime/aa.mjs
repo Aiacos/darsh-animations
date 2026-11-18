@@ -17,7 +17,12 @@ import { blfxPlays } from "./blfxmap.mjs";
 import { MENUS, englishKeys, normalize, resolveLabel, aaWhich } from "../core/aa.mjs";
 import { renderer } from "./renderer.mjs";
 import { before, chain, domainOf, pick } from "./sources.mjs";
-import { strikesWouldPlay } from "./strikes.mjs";
+
+/**
+ * « Le rendu des attaques jouera-t-il cet objet ? » (runtime/strikes.mjs, `strikesWouldPlay`), reçu à `registerAA` : ce rendu
+ * importe déjà ce fichier (`aaPlays`, `englishKeysOf`), l'importer ici en retour ferait un cycle.
+ */
+let strikesWouldPlay = () => false;
 
 /** Marque posée sur les données d'un appel à AA fait par ce module pour un châtiment (lue à `AutomatedAnimations-WorkflowStart`). */
 export const SMITE_MARK = "darshAnimationsSmite";
@@ -203,7 +208,9 @@ export async function aaResolve({ item, activity=null, isTemplate=false }={}) {
   };
 }
 
-export function registerAA() {
+/** @param {{ strikesWouldPlay?: (item: Item, activity?: object) => boolean }} [options]   voir `strikesWouldPlay` plus haut */
+export function registerAA({ strikesWouldPlay: wouldPlay=null }={}) {
+  if ( wouldPlay ) strikesWouldPlay = wouldPlay;
   game.settings.register(MODULE_ID, "aaNames", {
     name: "DARSHANIM.Settings.AaNames.Name", hint: "DARSHANIM.Settings.AaNames.Hint",
     scope: "world", config: true, type: Boolean, default: true

@@ -25,7 +25,7 @@ import { castingEffects, previewCancelledCast, registerCasting } from "./runtime
 import { aaPlays, aaResolve, addNames, registerAA } from "./runtime/aa.mjs";
 import { playSmite, registerSmites } from "./runtime/smites.mjs";
 import { playDoor, previewDoor, registerDoors } from "./runtime/doors.mjs";
-import { playStrike, previewStrike, registerStrikes } from "./runtime/strikes.mjs";
+import { playStrike, previewStrike, registerStrikes, strikesWouldPlay } from "./runtime/strikes.mjs";
 import { previewCondition, reconcile as reconcileConditions, registerConditions } from "./runtime/conditions.mjs";
 import { previewSummon, registerSummons } from "./runtime/summons.mjs";
 import { previewSummonArt, registerSummonArt, summonArtVariants } from "./runtime/summon-art.mjs";
@@ -84,7 +84,7 @@ Hooks.once("init", () => {
   registerConsumables();
   registerAreas();
   registerCasting();
-  registerAA();
+  registerAA({ strikesWouldPlay });
   registerSmites();
   registerDoors();
   registerStrikes();
